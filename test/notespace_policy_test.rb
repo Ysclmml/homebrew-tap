@@ -1,4 +1,4 @@
-# typed: false # rubocop:disable Sorbet/StrictSigil, Sorbet/TrueSigil
+# typed: false
 # frozen_string_literal: true
 
 # Run with Homebrew's existing Ruby; no gem installation is needed:
