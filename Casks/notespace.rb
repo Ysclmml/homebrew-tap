@@ -12,6 +12,23 @@ cask "notespace" do
 
   app "NoteSpace.app"
 
+  postflight do
+    notespace_app = Pathname.new(appdir)/"NoteSpace.app"
+    notespace_app.ascend do |path|
+      raise "Refusing to change redirected NoteSpace application: #{path}" if path.symlink?
+    end
+    raise "Installed NoteSpace application was not found: #{notespace_app}" unless notespace_app.directory?
+
+    # This personal tap deliberately removes only this app's download quarantine.
+    # -s never follows bundle symlinks; -r also makes missing attributes a no-op.
+    # Do not clear other attributes, request sudo, or change global Gatekeeper policy.
+    system_command "/usr/bin/xattr",
+                   args:         ["-r", "-d", "-s", "com.apple.quarantine", notespace_app.to_s],
+                   must_succeed: true,
+                   print_stdout: false,
+                   sudo:         false
+  end
+
   # This tap deliberately cleans application data on explicit uninstall.
   # A plain `uninstall trash:` would also clear it during upgrades/reinstalls.
   # Keep this guard inside the saved uninstall hook, not at Cask load time.
@@ -80,6 +97,8 @@ cask "notespace" do
 
   caveats <<~EOS
     This Apple Silicon preview is ad-hoc signed and is not notarized by Apple.
+    This personal tap removes download quarantine only from the installed NoteSpace.app.
+    It does not change global macOS security settings or provide Apple notarization.
     Save your documents and quit NoteSpace before uninstalling or upgrading.
     Ordinary brew uninstall also moves NoteSpace settings, recent files,
     browsing state, and cache to Trash. Notes, workspaces, and images are kept.

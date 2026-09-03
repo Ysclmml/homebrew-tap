@@ -83,12 +83,17 @@ class NotespacePolicyTest
     @assertions = 0
     @pgrep_calls = []
     @pgrep_statuses = [1]
+    @xattr_calls = []
     @trash_calls = []
     @messages = []
   end
 
   def prepare(directory)
-    @temporary = Pathname.new(directory)
+    @temporary = Pathname.new(directory).realpath
+    @fixture_appdir = @temporary/"Applications"
+    @fixture_app = @fixture_appdir/"NoteSpace.app"
+    @fixture_app.mkpath
+    @cask.config = Cask::Config.new(explicit: { appdir: @fixture_appdir })
     @fixture_home = @temporary/"home"
     @data_paths = DATA_PATHS.map { |relative| @fixture_home/relative }
     @data_paths.each do |path|
@@ -144,6 +149,17 @@ class NotespacePolicyTest
   def isolate(&block)
     forbidden = ->(*) { raise AssertionFailure, "Unexpected process or non-isolated Trash operation" }
     process_check = lambda do |executable, **options|
+      if executable.to_s == "/usr/bin/xattr"
+        assert_equal(["-r", "-d", "-s", "com.apple.quarantine", @fixture_app.to_s], options[:args])
+        assert_equal(true, options[:must_succeed])
+        assert_equal(false, options[:print_stdout])
+        assert_equal(false, options[:sudo])
+        assert(!options[:sudo_as_root], "Quarantine handling must not request elevation")
+        @xattr_calls << [executable, options]
+        raise @xattr_error if @xattr_error
+
+        next SystemCommand::Result.allocate.tap { |result| result.exit_status = 0 }
+      end
       assert_equal("/usr/bin/pgrep", executable.to_s)
       assert_equal(["-u", Process.uid.to_s, "-x", "notespace|markdown-workspace"], options[:args])
       assert_equal(false, options[:must_succeed])
@@ -205,8 +221,9 @@ class NotespacePolicyTest
     end
   end
 
-  def artifact(type)
+  def artifact(type, directive = nil)
     matches = @cask.artifacts.grep(type)
+    matches.select! { |entry| entry.directives.key?(directive) } if directive
     assert_equal(1, matches.length)
     matches.first
   end
@@ -216,7 +233,11 @@ class NotespacePolicyTest
   end
 
   def postflight(**options)
-    artifact(Cask::Artifact::PostflightBlock).uninstall_phase(**options)
+    @cask.artifacts.grep(Cask::Artifact::PostflightBlock).each { |entry| entry.uninstall_phase(**options) }
+  end
+
+  def install_postflight
+    @cask.artifacts.grep(Cask::Artifact::PostflightBlock).each(&:install_phase)
   end
 
   def uninstall_hooks(**options)
@@ -281,11 +302,14 @@ class NotespacePolicyTest
 
   test "Cask exposes only app and guarded flight blocks, without zap or kill directives" do
     assert_equal(
-      [Cask::Artifact::App, Cask::Artifact::PreflightBlock, Cask::Artifact::PostflightBlock].map(&:name).sort,
+      [Cask::Artifact::App, Cask::Artifact::PreflightBlock,
+       Cask::Artifact::PostflightBlock, Cask::Artifact::PostflightBlock].map(&:name).sort,
       @cask.artifacts.map { |entry| entry.class.name }.sort,
     )
     assert_equal([:uninstall_preflight], artifact(Cask::Artifact::PreflightBlock).directives.keys)
-    assert_equal([:uninstall_postflight], artifact(Cask::Artifact::PostflightBlock).directives.keys)
+    assert_equal([:postflight], artifact(Cask::Artifact::PostflightBlock, :postflight).directives.keys)
+    assert_equal([:uninstall_postflight],
+                 artifact(Cask::Artifact::PostflightBlock, :uninstall_postflight).directives.keys)
   end
 
   {
@@ -300,6 +324,7 @@ class NotespacePolicyTest
         uninstall_hooks
       end
       assert_equal(2, @pgrep_calls.length)
+      assert_equal([], @xattr_calls)
       assert_equal([@data_paths.map(&:to_s)], @trash_calls)
       assert_equal(1, @messages.count { |kind, _| kind == :success })
     end
@@ -316,10 +341,55 @@ class NotespacePolicyTest
     end
   end
 
-  test "install phases never invoke uninstall hooks" do
+  test "install phases target only the configured app and never invoke uninstall hooks" do
     artifact(Cask::Artifact::PreflightBlock).install_phase
-    artifact(Cask::Artifact::PostflightBlock).install_phase
+    install_postflight
     assert_equal([], @pgrep_calls)
+    assert_equal(1, @xattr_calls.length)
+    assert_preserved
+  end
+
+  test "quarantine handling failures are propagated without elevation or fallback" do
+    @xattr_error = IOError.new("synthetic quarantine removal failure")
+    assert_raises(/synthetic quarantine removal failure/) do
+      install_postflight
+    end
+    assert_equal(1, @xattr_calls.length)
+    assert_equal([], @pgrep_calls)
+    assert_preserved
+  end
+
+  ["NoteSpace.app", "."].each do |relative|
+    test "redirected install path #{relative} is rejected before xattr" do
+      original = @fixture_appdir/relative
+      original = original.cleanpath
+      destination = @temporary/"redirected-app"
+      FileUtils.mv(original, destination)
+      File.symlink(destination, original)
+      assert_raises(/redirected NoteSpace application/) do
+        install_postflight
+      end
+      assert_equal([], @xattr_calls)
+      assert_preserved
+    end
+  end
+
+  test "missing installed app fails before xattr" do
+    @fixture_app.rmdir
+    assert_raises(/application was not found/) do
+      install_postflight
+    end
+    assert_equal([], @xattr_calls)
+    assert_preserved
+  end
+
+  test "a file named NoteSpace.app is not accepted as an application bundle" do
+    @fixture_app.rmdir
+    @fixture_app.write("synthetic non-bundle\n")
+    assert_raises(/application was not found/) do
+      install_postflight
+    end
+    assert_equal([], @xattr_calls)
     assert_preserved
   end
 
