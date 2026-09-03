@@ -1,6 +1,6 @@
 cask "notespace" do
-  version "0.1.0"
-  sha256 "8973594d28d7a5fb975536f38ee607e8e55abe4f814d96dbedc4b57c211ee981"
+  version "0.2.0"
+  sha256 "b8f1fba7fb12d96aeb59544c2243a6979750af31cad4a3de4e16da48e3ca27b7"
 
   url "https://github.com/Ysclmml/notespace/releases/download/v#{version}/NoteSpace_#{version}_aarch64.dmg"
   name "NoteSpace"
