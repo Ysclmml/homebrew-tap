@@ -6,11 +6,19 @@
 
 ## 安装
 
+首次使用先添加 Tap：
+
+```sh
+brew tap ysclmml/tap
+```
+
+然后安装 NoteSpace：
+
 ```sh
 brew install --cask ysclmml/tap/notespace
 ```
 
-当前 0.2.0 预览版尚未通过 Apple 公证。本安装源仅移除 NoteSpace 的下载隔离标记，不关闭全局系统安全检查；请在信任本仓库及发布者后安装。
+当前 0.2.2 预览版尚未通过 Apple 公证。本安装源仅移除 NoteSpace 的下载隔离标记，不关闭全局系统安全检查；请在信任本仓库及发布者后安装。
 
 ## 升级
 
@@ -30,3 +38,9 @@ brew uninstall ysclmml/tap/notespace
 ```
 
 普通卸载会移除应用，并将设置、最近文件、浏览记录和缓存移入废纸篓；不会删除笔记、工作区或图片。
+
+确认不再通过这个 Tap 安装其他软件后，可移除 Tap：
+
+```sh
+brew untap ysclmml/tap
+```
