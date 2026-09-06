@@ -18,7 +18,7 @@ brew tap ysclmml/tap
 brew install --cask ysclmml/tap/notespace
 ```
 
-当前 0.2.3 预览版尚未通过 Apple 公证。本安装源仅移除 NoteSpace 的下载隔离标记，不关闭全局系统安全检查；请在信任本仓库及发布者后安装。
+当前 0.2.4 预览版尚未通过 Apple 公证。本安装源仅移除 NoteSpace 的下载隔离标记，不关闭全局系统安全检查；请在信任本仓库及发布者后安装。
 
 ## 升级
 
